@@ -1,0 +1,39 @@
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Porta_Santa_Maria_Maggiore_Trento/0.jpg
+and the first 4 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 400
+Matches with photo 0: 138
+Matches with photo 1: 111
+Matches with photo 2: 59
+Matches with photo 3: 139
+
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Porta_Santa_Maria_Maggiore_Trento/0.jpg
+and the first 4 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 800
+Matches with photo 0: 85
+Matches with photo 1: 51
+Matches with photo 2: 31
+Matches with photo 3: 48
+
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Ulivo_Universita_Povo/0.jpg
+and the first 4 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 400
+Matches with photo 0: 85
+Matches with photo 1: 34
+Matches with photo 2: 100
+Matches with photo 3: 73
+
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Ulivo_Universita_Povo/0.jpg
+and the first 4 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 800
+Matches with photo 0: 37
+Matches with photo 1: 42
+Matches with photo 2: 67
+Matches with photo 3: 62

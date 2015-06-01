@@ -1,0 +1,38 @@
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/4.jpg
+and the first 3 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 500
+Matches with photo 0: 32
+Matches with photo 1: 33
+Matches with photo 2: 154
+
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/4.jpg
+and the first 3 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 300
+Matches with photo 0: 45
+Matches with photo 1: 66
+Matches with photo 2: 224
+
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/4.jpg
+and the first 3 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 800
+Matches with photo 0: 45
+Matches with photo 1: 230
+Matches with photo 2: 87
+
+Matching between image:   
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/4.jpg
+and the first 4 images in the folder: 
+/home/eugenio/Scrivania/Multi_Temporal_Image_Recognition/SERVER/Images/Duomo_Trento_Facciata/
+Value of MIN_HESSIAN = 800
+Matches with photo 0: 45
+Matches with photo 1: 230
+Matches with photo 2: 87
+Matches with photo 3: 35
+
+

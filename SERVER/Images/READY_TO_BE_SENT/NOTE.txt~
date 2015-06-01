@@ -1,0 +1,3 @@
+in questa cartella il server mi mette le foto che stanno per essere spedite al client, dopo che le ha ridimensionate per fare in modo che il client possa visualizzarle senza problemi
+
+mentre nelle cartelle con le topic il nome delle foto (che vanno da 0 a N-1), NON sono coerenti con l'ordine temporale delle stesse, qua invece la numerazione è coerente con l'ordine temporale

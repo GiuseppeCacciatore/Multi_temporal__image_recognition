@@ -1,0 +1,650 @@
+#include "Main_Class.hpp"
+
+Main_Class::Main_Class(string filename_config)
+{
+   string nome_cartella, path, str;
+   GPS_Coordinates mean_coordinates, coord;
+   Date date;
+   int orientation;
+   unsigned i, k, num_photos;
+   //bool ok_for_slideshow;
+
+   ifstream is(filename_config.c_str());
+
+   i = 0;
+   while (is >> nome_cartella >> num_photos)
+   {
+      //aggiorno il path per andare a prendere una per una le foto
+      path.clear();
+      path = PATH_TO_IMAGE_DIRECTORY + nome_cartella;
+      path += "/";
+
+      topics.push_back(Topic_Photo(nome_cartella));
+
+      mean_coordinates = GPS_Coordinates(0,0);
+
+      //leggo una per una le immagini e ne salvo la data e le coordinate
+      for (k = 0; k < num_photos; k++)
+      {
+         //converto il numero dell'indice in una stringa
+         str = FromUnsignedToString(k);
+         str += ".jpg";
+         GetDataFromImage(path + str, date, coord, orientation);
+
+         //aggiorno il calcolo delle coordinate medie
+         mean_coordinates.latitude += coord.latitude / num_photos;
+         mean_coordinates.longitude += coord.longitude / num_photos;
+
+         topics[i].AddPhoto( Photo(str, date, coord, orientation) );
+         //NB: devo salvare anche il nome della foto e non posso basarmi solo
+         //sull'indice del vettore delle foto, perchè possono poi essere riordinate
+         //per data!!!
+      }
+
+      topics[i].SetMeanGPSCoordinates(mean_coordinates);
+
+      //riordino le foto della topic i per data crescente
+      topics[i].ReorderPhotos();
+
+      i++;
+   }
+
+   is.close();
+
+
+   //DEBUG: provo a stampare il contenuto del vettore topics in un file
+   ofstream os((PATH_TO_IMAGE_DIRECTORY + "log.txt").c_str());
+   for (unsigned j=0; j < topics.size(); j++)
+      os << "TOPIC " << j << endl << topics[j] << endl;
+   os.close();
+}
+
+void Main_Class::Start()
+{
+   vector< int > indexes;
+
+   cout << "Server starting..." << endl;
+
+   //apro il file per stampare il report
+   file_report.open((PATH_TO_IMAGE_DIRECTORY + "report.txt").c_str());
+
+	while(true)
+	{
+	   //mi metto in ascolto per eventuali connessioni
+      //fino a che ricevo una foto che salvo nella directory corrente
+	   ReceivePhoto();
+
+		//leggo la foto e ne salvo i dati nell'oggetto received_photo
+	   ReadReceivedPhoto();
+      file_report << "FOTO RICEVUTA: " << filename_received << endl;
+
+	   //se la foto ricevuta NON ha le coordinate GPS, uso sono il matching tra
+	   //le foto
+	   if (received_photo.Latitude() == 0  &&  received_photo.Longitude() == 0)
+	   {
+	      indexes = vector<int>(topics.size(), 0);
+	      for(unsigned i=1; i < indexes.size(); i++)
+	         indexes[i] = (int)i;
+
+	      SendSlideshow( MatchingControl(indexes) );
+	   }
+	   else
+	   {
+
+	   //ora devo capire se ci sono foto inerenti a quella ricevuta o meno
+
+		//FindGPSMatching prende la foto ricevuta e il vettore con i vari
+		//gruppi di foto, e vede se la foto ricevuta appartiene o meno ad uno di
+		//questi gruppi:
+		//se ritorna un solo indice >=0 significa che ha trovato la corrispondenza
+		//univoca, se ne ritorna più di uno significa che ha trovato corrispondenza
+		//ma non univoca, quindi devono intervenire le funzioni di SURF per
+		//giungere ad una corrispondenza univoca. Se ritorna un solo indice e pari
+		//a -1, significa che non ha trovato corrispondenze
+		indexes = FindGPSMatching();
+
+      cout << "Gli indici delle corrispondenze sono: ";
+      for(unsigned k=0; k < indexes.size(); k++)
+         cout << indexes[k] << " - ";
+      cout << endl;
+
+
+		if (indexes.size() > 1)
+		{
+		   //se sono qui significa che le coordinate GPS mi danno più di una
+		   //topic come possibile candidato
+		   //quindi devo controllarle tutte e vedere quella che mi fa il matching,
+		   //se lo fa
+		   SendSlideshow( MatchingControl(indexes) );
+		}
+		else
+		{
+	      if (indexes[0] >= 0)
+			{
+	         //se sono qui significa che le coordinate GPS mi danno una sola
+				//topic come possibile candidato
+            cerr << "le GPS mi danno una sola topic come possibile candidata\n";
+				//se la foto supera il controllo del matching con le altre, allora
+				//posso inviare lo slideshow
+				if (MatchingControl(indexes) >= 0)
+				{
+				   SendSlideshow(indexes[0]);
+				}
+				else
+		      {
+		         SendSlideshow(-1);
+				}
+
+			}
+	      else  //le coordinate GPS mi dicono che non c'è nessuna topic compatibile
+			{
+	         SendSlideshow(-1);
+			}
+		}
+	   }
+
+		//distruggi eventuali foto presenti nella cartella READY_TO_BE_SENT
+		RemovePhotoFromREADY_TO_BE_SENT_FOLDER();
+	}
+}
+
+void Main_Class::ReceivePhoto()
+{
+   //mi metto in ascolto per eventuali connessioni
+   //fino a che ricevo una foto che salvo nella directory PATH_TO_IMAGE_DIRECTORY
+   //e il cui nome salvo sulla stringa filename_received
+
+   //COMANDO PROVVISORIO per entrare nella cartella dove c'è l'exe java
+   //system("cd /home/eugenio/AndroidStudioProjects/");
+   //system("ls");
+   //faccio partire il server java (senza occupare la linea di comando)
+   system("java TX_RX_Server &");
+
+   //ora devo aspettare fino a connessione e ricezione foto avvenute!
+   //capisco che ho ricevuto una foto quando mi compare nella cartella corrente
+   //un file di testo txt chiamato: RICEZIONE_AVVENUTA
+   cout << "Waiting for a client..." << endl;
+   do
+   {
+      sleep(SECONDS_SLEEP);
+      //cerr << "sto aspettando - ";
+   }
+   while( !DoesFileExist(PATH_TO_IMAGE_DIRECTORY + RICEZIONE_AVVENUTA) );
+
+   cerr << "ricezione foto avvenuta\n";
+
+   //l'immagine ricevuta avrà nome NOME_IMMAGINE_RICEVUTA
+   filename_received = PATH_TO_IMAGE_DIRECTORY + NOME_IMMAGINE_RICEVUTA;
+
+   //cerr << "ho ricevuto la foto " << filename_received << endl;
+
+   remove((PATH_TO_IMAGE_DIRECTORY + RICEZIONE_AVVENUTA).c_str());
+}
+
+void Main_Class::ReadReceivedPhoto()
+{
+   //leggo la foto e ne salvo i dati nell'oggetto received_photo
+   //la stringa filename_received contiene già il percorso completo della foto
+   //nella memoria del pc
+   //quindi sostanzialmente mi interessa estrarre data e coordinate
+   //inoltre della foto ricevuta mi carico già i dati necessari per il SURF
+
+   Date date;
+   GPS_Coordinates coord;
+   int orientation;
+
+   GetDataFromImage(filename_received, date, coord, orientation);
+
+   received_photo = Photo(filename_received, date, coord, orientation);
+
+   //carico i dati per il SURF
+   Mat img_rec = imread(filename_received, CV_LOAD_IMAGE_GRAYSCALE);
+   assert(img_rec.data);
+   SurfFeatureDetector detector( MIN_HESSIAN );
+   vector<KeyPoint> keypoints_rec;
+   detector.detect( img_rec, keypoints_rec );
+   SurfDescriptorExtractor extractor;
+   extractor.compute( img_rec, keypoints_rec, descriptors_received_photo );
+
+   //DEBUG aggiungo i dati della foto ricevuta al file di log
+   ofstream os;
+   os.open((PATH_TO_IMAGE_DIRECTORY + "log.txt").c_str(), ofstream::app);
+   os << "RECEIVED PHOTO:" << endl << received_photo << endl;
+   os.close();
+}
+
+vector< int > Main_Class::FindGPSMatching()
+{
+   //FindGPSMatching prende la foto ricevuta e il vettore con i vari
+   //gruppi di foto, e vede se la foto ricevuta appartiene o meno ad uno di
+   //questi gruppi:
+   //se ritorna un solo indice >=0 significa che ha trovato la corrispondenza
+   //univoca, se ne ritorna più di uno significa che ha trovato corrispondenza
+   //ma non univoca, quindi devono intervenire le funzioni di SURF per
+   //giungere ad una corrispondenza univoca. Se ritorna un solo indice e pari
+   //a -1, significa che non ha trovato corrispondenze
+
+   vector<int> indexes;
+
+   //per ogni topic
+   for(unsigned i = 0; i < topics.size(); i++)
+   {
+      //se le coordinate del topic[i] e dell'immagine ricevuta sono abbastanza vicine
+      //aggiungi l'indice i al vettore indexes
+      //voglio evitare problemi di overflow con ste coordinate, quindi NON faccio:
+      // sqrt((top[i].lat - lat)^2 + (top[i].lon - lon)^2) < MAX_DISTANCE_COORDINATES
+      //ma bensì mi assicuro che la foto ricevuta sia dentro ad un quadrato di lato
+      //MAX_DISTANCE_COORDINATES e centro le coordinate salvate nel topic[i]
+
+      if ( abs(topics[i].Latitude() - received_photo.Latitude()) <= MAX_DISTANCE_LATITUDE / 2  &&
+           abs(topics[i].Longitude() - received_photo.Longitude()) <= MAX_DISTANCE_LONGITUDE / 2 )
+      {
+         indexes.push_back((int)i);
+      }
+   }
+
+   //se non ho aggiunto nulla a sto vettore, ci metto il -1 per indicare che non ho
+   //trovato matchings
+   if (indexes.size() == 0)
+      indexes.push_back(-1);
+
+   return indexes;
+}
+
+
+int Main_Class::MatchingControl(const vector<int>& indexes)
+{
+   file_report << "CONTROLLO MATCHING TRA FOTO" << endl;
+   //questa funzione mi fa il matching tra la foto ricevuta e le foto contenute
+   //nel vettore topic negli indici indicati dal vettore indexes
+   //mi ritorna l'indice della topic "vincente", oppure -1 se non sono stati
+   //trovati sufficienti matches in nessuno dei casi
+
+   string nome_foto;
+   unsigned i, k;
+   long unsigned punti_in_comune, max_punti_comune_topic;
+   long unsigned max_punti_comune_tra_tutte_topics = 0;
+   int vincente = -1;
+
+   if (indexes.size() == 0)
+      return -1;
+
+   //per ogni topic il cui indice è in indexes
+   for (i = 0; i < indexes.size(); i++)
+   {
+      max_punti_comune_topic = 0;
+
+      file_report << "topic " << indexes[i] << ":\n";
+
+      //per ogni foto della topic i
+      for (k = 0; k < topics[indexes[i]].NumOfPhotos(); k++)
+      {
+         //mi ricavo il nome della foto che devo confrontare con quella ricevuta
+         nome_foto.clear();
+         nome_foto = PATH_TO_IMAGE_DIRECTORY + topics[indexes[i]].Topic();
+         nome_foto += '/';
+         nome_foto += FromUnsignedToString(k);
+         nome_foto += ".jpg";
+
+         punti_in_comune = NumOfSURFMatchingPoints(nome_foto);
+
+         file_report << "punti comune con foto " << k << ": "
+                     << punti_in_comune << endl;
+
+         if (punti_in_comune > max_punti_comune_topic)
+            max_punti_comune_topic = punti_in_comune;
+      }
+
+      if (max_punti_comune_topic > max_punti_comune_tra_tutte_topics)
+      {
+         max_punti_comune_tra_tutte_topics = max_punti_comune_topic;
+         vincente = indexes[i];
+      }
+
+      cerr << "max punti in comune con topic " << indexes[i]
+           << ": " << max_punti_comune_topic << endl;
+   }
+
+   //cerr << "massima media dei punti in comune: " << massima_media_punti_in_comune << endl;
+
+   //in tutti i casi la topic vincente deve avere un minimo di punti di matching
+   if (max_punti_comune_tra_tutte_topics >= MIN_MATCHES)
+      return vincente;
+   //else
+      return -1;
+}
+
+void Main_Class::SendSlideshow(int index)
+{
+   string str = PATH_TO_IMAGE_DIRECTORY + ELABORAZIONE_EFFETTUATA;
+   unsigned i;
+   bool first_photo = true;
+
+   cerr << "Elaborazione finita, sto per spedire lo slideshow della topic con indice:"
+        << index << endl;
+
+   //prima di tutto, se ho ricevuto un -1 come parametro, non ci sono foto da
+   //inviare, e quindi devo avvisare il server java di ciò
+   if (index < 0)
+   {
+      ofstream os(str.c_str());
+      os.close();
+   }
+   else
+   {
+      //prima di spedire lo slideshow, devo fare un controllo su quali immagini
+      //inviare e quali no, e tra quelle che posso inviare fare degli aggiustamenti
+      //per allinearle tutte?
+      //se avrò tempo lo farò, per ora no
+      MakePhotosOKForSlideshow(index);
+
+      //ora devo calare la risoluzione delle foto che sto per spedire
+      //e salvare la copia della foto con risoluzione più bassa
+      //nell'apposita cartella
+      DecreasePhotoResolution(index);
+
+      //stampo un file di testo in cui dico il numero di foto che devo spedire
+      //e il loro nome nell'ordine in cui devono essere spedite!
+      ofstream os(str.c_str());
+
+      for(i = 0; i < topics[index].NumOfPhotos(); i++)
+      {
+         if (topics[index].GetPhoto(i).OkForSlideshow())
+         {
+            if (first_photo)
+               first_photo = false;
+            else
+               os << '\n';
+
+            os << PATH_TO_IMAGE_DIRECTORY
+               << READY_TO_BE_SENT_FOLDER
+               << FromUnsignedToString(i) << ".jpg";
+         }
+      }
+
+      os.close();
+   }
+
+   //ora voglio far dormire il server c++ fino a che quello java non ha finito
+   //di inviare e sta per disconnettersi
+   do
+   {
+         sleep(SECONDS_SLEEP);
+   }
+   while( !DoesFileExist(PATH_TO_IMAGE_DIRECTORY + SLIDESHOW_SPEDITO) );
+
+   remove((PATH_TO_IMAGE_DIRECTORY + SLIDESHOW_SPEDITO).c_str());
+
+   sleep(2*SECONDS_SLEEP);  //per sicurezza
+}
+
+void Main_Class::GetDataFromImage(const string& name,
+                                  Date& date,
+                                  GPS_Coordinates& coord,
+                                  int& orientation)
+{
+   const string nome_file_tag = "tags.txt";
+
+   //prima di tutto mi assicuro che la foto esista
+   ifstream is(name.c_str());
+   assert(is.is_open());
+   is.close();
+
+   //salvo i dati della foto in un file
+   string comando = "exiftool ";
+   comando += name;
+   comando += " > ";
+   comando += nome_file_tag;
+   system(comando.c_str());
+
+   is.open(nome_file_tag.c_str());
+
+   /* ciò che mi interessa leggere sono queste 4 righe:
+
+   Orientation                     : Rotate 90 CW
+   ...
+   Date/Time Original              : 2015:04:09 20:08:29
+   ...
+   GPS Latitude                    : 46 deg 4' 8.39" N
+   GPS Longitude                   : 11 deg 7' 9.68" E
+
+   */
+   string str;
+   char ch;
+   long double gradi, primi, secondi;
+
+   //leggo l'orientazione
+   while( is >> str )
+   {
+      if (str == "Orientation")
+      {
+         is >> ch >> str;
+         if (str == "Rotate")
+            orientation = 90;
+         else  //(str == "Horizontal")
+            orientation = 0;
+
+         break;
+      }
+   }
+
+   //leggo la data
+   while( is >> str )
+   {
+      if (str == "Date/Time")
+      {
+         is >> str;
+         if (str == "Original")
+         {
+            is >> ch >> date;
+
+            break;
+         }
+      }
+   }
+
+   //leggo le coordinate
+   while ( is >> str )
+   {
+      if (str == "GPS")
+      {
+         is >> str;
+
+         if (str == "Latitude")
+         {
+            is >> str;
+
+            if (str == ":")
+            {
+               is >> gradi >> str >> primi >> ch >> secondi >> ch >> ch;
+               //cerr << gradi << ' ' << primi << ' ' << secondi << '\n';
+               coord.latitude = gradi + primi/60 + secondi/3600;
+               if (ch == 'S')   //se mi trovo all'emisfero sud la latitudine è negativa
+                  coord.latitude = -coord.latitude;
+
+               is >> str >> str >> ch   //prendo il "GPS Longitude     :"
+                  >> gradi >> str >> primi >> ch >> secondi >> ch >> ch;
+
+               coord.longitude = gradi + primi/60 + secondi/3600;
+               if (ch == 'O')   //se mi trovo all'emisfero ovest la longitude è negativa
+                  coord.longitude = -coord.longitude;
+
+               break;
+            }
+         }
+      }
+   }
+
+   is.close();
+
+   //ora cancello il file tags.txt
+   remove(nome_file_tag.c_str());
+}
+
+string Main_Class::FromUnsignedToString(unsigned k)
+{
+   string out;
+
+   out.push_back('0' + k % 10);
+
+   k /= 10;
+
+   while(k > 0)
+   {
+      out.insert(out.begin(), '0' + k % 10);
+
+      k /= 10;
+   }
+
+   return out;
+}
+
+bool Main_Class::DoesFileExist(const string& url)
+{
+   FILE* file;
+
+   if((file = fopen(url.c_str(),"rw")) != NULL)
+   {
+      fclose(file);
+      return true;
+   }
+
+   return false;
+}
+
+long unsigned Main_Class::NumOfSURFMatchingPoints(const string& nome_foto)
+{
+   //in questa funzione implemento l'algoritmo di SURF tra la foto contenuta
+   //nella stringa nome_foto e quella presente come campo di classe,
+   //filename_received
+
+   unsigned k;
+   Mat img, descriptors;
+   vector<KeyPoint> keypoints;
+   vector< DMatch > matches, good_matches;
+
+   //leggo la foto passata come argomento
+   img = imread( nome_foto, CV_LOAD_IMAGE_GRAYSCALE);
+   assert(img.data);
+
+   //detect keypoints
+   SurfFeatureDetector detector( MIN_HESSIAN );
+   detector.detect( img, keypoints );
+
+   //Calculate descriptors (feature vectors)
+   SurfDescriptorExtractor extractor;
+   extractor.compute( img, keypoints, descriptors );
+
+   //Matching descriptor vectors using FLANN matcher
+   FlannBasedMatcher matcher;
+   matcher.match( descriptors_received_photo, descriptors, matches );
+
+
+   //-- Quick calculation of max and min distances between keypoints
+   double max_dist = 0;
+   double min_dist = 100;
+   double dist;
+
+   for( k = 0; k < matches.size(); k++ )
+   {
+      dist = matches[k].distance;
+
+      if( dist < min_dist )
+         min_dist = dist;
+      if( dist > max_dist )
+         max_dist = dist;
+   }
+
+   //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist,
+   //-- or a small arbitary value ( 0.02 ) in the event that min_dist is very
+   //-- small)
+   for( k = 0; k < matches.size(); k++ )
+   {
+      if( matches[k].distance <= max(2*min_dist, 0.02) )
+      {
+         good_matches.push_back( matches[k]);
+      }
+   }
+
+   return good_matches.size();
+}
+
+void Main_Class::MakePhotosOKForSlideshow(int index)
+{
+   //in sta funzione dovrei sia settare il booleano associato ad ogni foto che
+   //mi dice se va bene per lo slideshow, sia "correggere" le foto che vanno bene
+   //per lo slideshow in modo che siano allineate
+
+   //per ora van bene tutte
+   for(unsigned i=0; i < topics[index].NumOfPhotos(); i++)
+   {
+      topics[index].GetPhoto(i).MakeOKForSlideshow(true);
+   }
+}
+
+void Main_Class::DecreasePhotoResolution(int index)
+{
+   assert(index >= 0);
+
+   unsigned i;
+   Mat src, dst, r;
+   int len;
+   Size new_size;
+
+   //prendo una a una le foto contenute nella topic indicata dall'indice
+   //index e ne SALVO UNA COPIA CON RISOLUZIONE MINORE nell'apposita cartella
+   string src_folder = PATH_TO_IMAGE_DIRECTORY + topics[index].Topic() + '/';
+   string dst_folder = PATH_TO_IMAGE_DIRECTORY + READY_TO_BE_SENT_FOLDER;
+
+   for(i = 0; i < topics[index].NumOfPhotos(); i++)
+   {
+      src = imread(src_folder + topics[index].GetPhoto(i).Name(),
+                   CV_LOAD_IMAGE_COLOR );
+      assert(src.data);
+
+      //calcolo le nuove dimesioni della foto: il lato più lungo diventerà di
+      //lunghezza MAX_PHOTO_EDGE, e quello più corto sarà calato in proporzione
+      if (src.rows > src.cols)
+      {
+         new_size.height = MAX_PHOTO_EDGE;
+         new_size.width = (src.cols * MAX_PHOTO_EDGE) / src.rows;
+      }
+      else
+      {
+         new_size.width = MAX_PHOTO_EDGE;
+         new_size.height = (src.rows * MAX_PHOTO_EDGE) / src.cols;
+      }
+
+      if (topics[index].GetPhoto(i).Orientation() == 90)
+      {
+         //faccio l'immagine MAX_PHOTO_EDGExMAX_PHOTO_EDGE (quadrata)
+         //devo farlo perchè se la devo girare e non è quadrata, ci sono problemi
+         resize(src, dst, Size(MAX_PHOTO_EDGE,MAX_PHOTO_EDGE));
+
+         //ruoto l'immagine di -90 gradi
+         src = dst;
+
+         len = max(src.cols, src.rows);
+         Point2f pt(len/2., len/2.);
+         r = cv::getRotationMatrix2D(pt, -90, 1.0);
+         warpAffine(src, dst, r, Size(len, len));
+
+         src = dst;
+
+         //avendo girato l'immagine, le righe diventano le colonne e viceversa!
+         new_size = Size(new_size.height, new_size.width);
+      }
+
+      //faccio il resize
+      resize(src, dst, new_size);
+
+      imwrite(dst_folder + FromUnsignedToString(i) + ".jpg", dst);
+   }
+}
+
+void Main_Class::RemovePhotoFromREADY_TO_BE_SENT_FOLDER()
+{
+   unsigned i = 0;
+   while (remove((PATH_TO_IMAGE_DIRECTORY + READY_TO_BE_SENT_FOLDER + FromUnsignedToString(i) + ".jpg").c_str()) == 0)
+      i++;
+}

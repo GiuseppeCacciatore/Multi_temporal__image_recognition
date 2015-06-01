@@ -1,0 +1,2 @@
+g++ -o Main.exe -Wall Main_Server.cpp Main_Class.cpp Topic_Photo.cpp Photo.cpp Date.cpp GPS_Coordinates.hpp 
+
